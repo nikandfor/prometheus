@@ -32,7 +32,7 @@ type (
 	Summary struct {
 		par *SummaryMetric
 
-		ss []*quantile.TDigest[quantile.ExtremesBias]
+		ss []*quantile.TDigest
 
 		granula int64
 		last    int
@@ -147,7 +147,7 @@ func (a summaryAlloc) new() *Summary {
 	const Granula = 3 * time.Second
 	const Window = 15 * time.Second
 
-	ss := make([]*quantile.TDigest[quantile.ExtremesBias], Window/Granula)
+	ss := make([]*quantile.TDigest, Window/Granula)
 
 	for i := range ss {
 		ss[i] = quantile.NewExtremesBiased(0.01, 4096)
