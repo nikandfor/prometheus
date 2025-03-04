@@ -3,6 +3,7 @@ package prometheus
 import (
 	"strconv"
 	"sync"
+	"time"
 
 	"nikand.dev/go/quantile"
 )
@@ -31,19 +32,13 @@ type (
 	Summary struct {
 		par *SummaryMetric
 
-		s *quantile.TDigest
+		ss []*quantile.TDigest[quantile.ExtremesBias]
+
+		granula int64
+		last    int
 	}
 
 	SummaryVec = Vector[*Summary, summaryAlloc]
-
-	Quantile interface {
-		Insert(v float64)
-		Query(q float64) float64
-	}
-
-	QuantileMulti interface {
-		QueryMulti(qs, res []float64)
-	}
 
 	summaryAlloc struct {
 		par *SummaryMetric
@@ -79,14 +74,29 @@ func (v *SummaryMetric) init(qs []float64) {
 }
 
 func (v *Summary) Observe(x float64) {
+	ts := time.Now().UnixNano()
+	g := int(ts / v.granula)
+
 	defer v.par.mu.Unlock()
 	v.par.mu.Lock()
 
-	v.s.Insert(x)
+	if v.last == 0 {
+		v.last = g
+	}
+
+	for i := v.last + 1; i <= g; i++ {
+		v.ss[v.si(i)].Reset()
+	}
+
+	v.last = g
+
+	v.ss[v.si(g)].Insert(x)
 
 	v.par.sum += x
 	v.par.count++
 }
+
+func (v *Summary) si(i int) int { return i % len(v.ss) }
 
 func (v *SummaryMetric) Collect(w Writer) error {
 	err := v.d.WriteHeader(w)
@@ -109,7 +119,7 @@ func (v *Summary) writeMetric(w Writer, ln, lv []string) error {
 	v.par.ln = append(v.par.ln, "quantile")
 	v.par.lv = append(v.par.lv, "")
 
-	v.s.QueryMulti(v.par.qs, v.par.res)
+	quantile.QueryMulti(v.par.qs, v.par.res, v.ss...)
 
 	for i := range v.par.qs {
 		v.par.lv[last] = v.par.qtext[i]
@@ -134,11 +144,20 @@ func (v *Summary) writeMetric(w Writer, ln, lv []string) error {
 }
 
 func (a summaryAlloc) new() *Summary {
-	const N = 512
+	const Granula = 3 * time.Second
+	const Window = 15 * time.Second
+
+	ss := make([]*quantile.TDigest[quantile.ExtremesBias], Window/Granula)
+
+	for i := range ss {
+		ss[i] = quantile.NewExtremesBiased(0.01, 4096)
+	}
 
 	return &Summary{
 		par: a.par,
 
-		s: quantile.NewTDigest(N, quantile.TDigestEpsilon(N)),
+		ss: ss,
+
+		granula: int64(Granula),
 	}
 }
