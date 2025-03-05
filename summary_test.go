@@ -7,17 +7,15 @@ func TestSummary(tb *testing.T) {
 
 	c.Observe(1)
 
-	c = NewSummary(SummaryOpts{
-		Opts: Opts{
-			Namespace: "prometheus",
-			Subsystem: "tests",
-			Name:      "summary",
+	c = NewSummary(Opts{
+		Namespace: "prometheus",
+		Subsystem: "tests",
+		Name:      "summary",
 
-			Help: "simple summary",
+		Help: "simple summary",
 
-			Labels: []Label{{"counter", "label"}},
-		},
-
+		Labels: []Label{{"counter", "label"}},
+	}, SummaryOpts{
 		Quantiles: []float64{0.9, 0.95, 1},
 	})
 
@@ -32,17 +30,15 @@ func TestSummary(tb *testing.T) {
 
 	cv.WithLabelValues("first", "second").Observe(1)
 
-	cv = NewSummaryVec(SummaryOpts{
-		Opts: Opts{
-			Namespace: "prometheus",
-			Subsystem: "tests",
-			Name:      "summary_vector",
+	cv = NewSummaryVec(Opts{
+		Namespace: "prometheus",
+		Subsystem: "tests",
+		Name:      "summary_vector",
 
-			Help: "simple summary vec",
+		Help: "simple summary vec",
 
-			Labels: []Label{{"counter", "label"}},
-		},
-
+		Labels: []Label{{"counter", "label"}},
+	}, SummaryOpts{
 		Quantiles: []float64{0.9, 0.95, 1},
 	}, []string{"first"})
 

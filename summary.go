@@ -10,8 +10,6 @@ import (
 
 type (
 	SummaryOpts struct {
-		Opts
-
 		Quantiles []float64
 	}
 
@@ -53,22 +51,22 @@ type (
 	}
 )
 
-func NewSummary(opts SummaryOpts) *Summary {
+func NewSummary(opts Opts, sumo SummaryOpts) *Summary {
 	m := &Summary{
 		d: opts.desc(SummaryType),
 	}
 
-	m.initMetric(opts.Quantiles)
+	m.initMetric(sumo.Quantiles)
 	m.initCounter()
 
 	return m
 }
 
-func NewSummaryVec(opts SummaryOpts, labelNames []string) *SummaryVec {
+func NewSummaryVec(opts Opts, sumo SummaryOpts, labelNames []string) *SummaryVec {
 	m := &Summary{}
-	m.initMetric(opts.Quantiles)
+	m.initMetric(sumo.Quantiles)
 
-	return newVector[*Summary](opts.Opts, SummaryType, labelNames, summaryAlloc{m})
+	return newVector[*Summary](opts, SummaryType, labelNames, summaryAlloc{m})
 }
 
 func (v *Summary) initMetric(qs []float64) {
