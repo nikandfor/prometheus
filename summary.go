@@ -15,55 +15,63 @@ type (
 		Quantiles []float64
 	}
 
-	SummaryMetric struct {
+	Summary struct {
 		d Desc
 
-		mu      sync.Mutex
-		qs, res []float64
-		qtext   []string
-		ln, lv  []string
+		mu sync.Mutex
+
+		qs, res []float64 // quantile calc tmp vars
+		qtext   []string  // encoded to text quantile values
+
+		ln, lv []string // tmp vars to add quantile="0.9" to metric labels
 
 		sum   float64
 		count int
 
-		Summary
-	}
+		// end of mu
 
-	Summary struct {
-		par *SummaryMetric
+		Now func() time.Time // mockable time source
+
+		// counter
+
+		// protected by par.mu
+
+		par *Summary
 
 		ss []*quantile.TDigest
 
 		granula int64
 		last    int
+
+		// end of par.mu
 	}
 
-	SummaryVec = Vector[*Summary, summaryAlloc]
+	SummaryVec = Vector[*Summary]
 
 	summaryAlloc struct {
-		par *SummaryMetric
+		par *Summary
 	}
 )
 
-func NewSummary(opts SummaryOpts) *SummaryMetric {
-	m := &SummaryMetric{
+func NewSummary(opts SummaryOpts) *Summary {
+	m := &Summary{
 		d: opts.desc(SummaryType),
 	}
 
-	m.Summary = *summaryAlloc{m}.new()
-	m.init(opts.Quantiles)
+	m.initMetric(opts.Quantiles)
+	m.initCounter()
 
 	return m
 }
 
 func NewSummaryVec(opts SummaryOpts, labelNames []string) *SummaryVec {
-	m := &SummaryMetric{}
-	m.init(opts.Quantiles)
+	m := &Summary{}
+	m.initMetric(opts.Quantiles)
 
-	return newVector[*Summary, summaryAlloc](opts.Opts, SummaryType, labelNames, summaryAlloc{m})
+	return newVector[*Summary](opts.Opts, SummaryType, labelNames, summaryAlloc{m})
 }
 
-func (v *SummaryMetric) init(qs []float64) {
+func (v *Summary) initMetric(qs []float64) {
 	v.qs = append(v.qs[:0], qs...)
 	v.res = append(v.res[:0], qs...)
 	v.qtext = make([]string, len(qs))
@@ -73,12 +81,36 @@ func (v *SummaryMetric) init(qs []float64) {
 	}
 }
 
+func (s *Summary) initCounter() {
+	const Granula = 3 * time.Second
+	const Window = 15 * time.Second
+
+	s.ss = make([]*quantile.TDigest, Window/Granula)
+
+	for i := range s.ss {
+		s.ss[i] = quantile.NewExtremesBiased(0.01, 4096)
+	}
+
+	s.granula = int64(Granula)
+}
+
 func (v *Summary) Observe(x float64) {
-	ts := time.Now().UnixNano()
+	if v == nil {
+		return
+	}
+
+	p := first(v.par, v)
+
+	now := p.Now
+	if now == nil {
+		now = time.Now
+	}
+
+	ts := now().UnixNano()
 	g := int(ts / v.granula)
 
-	defer v.par.mu.Unlock()
-	v.par.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.Lock()
 
 	if v.last == 0 {
 		v.last = g
@@ -92,13 +124,13 @@ func (v *Summary) Observe(x float64) {
 
 	v.ss[v.si(g)].Insert(x)
 
-	v.par.sum += x
-	v.par.count++
+	p.sum += x
+	p.count++
 }
 
 func (v *Summary) si(i int) int { return i % len(v.ss) }
 
-func (v *SummaryMetric) Collect(w Writer) error {
+func (v *Summary) Collect(w Writer) error {
 	err := v.d.WriteHeader(w)
 	if err != nil {
 		return err
@@ -108,34 +140,36 @@ func (v *SummaryMetric) Collect(w Writer) error {
 }
 
 func (v *Summary) writeMetric(w Writer, ln, lv []string) error {
-	defer v.par.mu.Unlock()
-	v.par.mu.Lock()
+	p := first(v.par, v)
 
-	v.par.ln = append(v.par.ln[:0], ln...)
-	v.par.lv = append(v.par.lv[:0], lv...)
+	defer p.mu.Unlock()
+	p.mu.Lock()
 
-	last := len(v.par.ln)
+	p.ln = append(p.ln[:0], ln...)
+	p.lv = append(p.lv[:0], lv...)
 
-	v.par.ln = append(v.par.ln, "quantile")
-	v.par.lv = append(v.par.lv, "")
+	last := len(p.ln)
 
-	quantile.QueryMulti(v.par.qs, v.par.res, v.ss...)
+	p.ln = append(p.ln, "quantile")
+	p.lv = append(p.lv, "")
 
-	for i := range v.par.qs {
-		v.par.lv[last] = v.par.qtext[i]
+	quantile.QueryMulti(p.qs, p.res, v.ss...)
 
-		err := w.Metric("", v.par.res[i], v.par.ln, v.par.lv)
+	for i := range p.qs {
+		p.lv[last] = p.qtext[i]
+
+		err := w.Metric("", p.res[i], p.ln, p.lv)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := w.Metric("sum", v.par.sum, v.par.ln[:last], v.par.lv[:last])
+	err := w.Metric("sum", p.sum, p.ln[:last], p.lv[:last])
 	if err != nil {
 		return err
 	}
 
-	err = w.Metric("count", float64(v.par.count), v.par.ln[:last], v.par.lv[:last])
+	err = w.Metric("count", float64(p.count), p.ln[:last], p.lv[:last])
 	if err != nil {
 		return err
 	}
@@ -144,20 +178,19 @@ func (v *Summary) writeMetric(w Writer, ln, lv []string) error {
 }
 
 func (a summaryAlloc) new() *Summary {
-	const Granula = 3 * time.Second
-	const Window = 15 * time.Second
+	s := &Summary{par: a.par}
+	s.initCounter()
+	return s
+}
 
-	ss := make([]*quantile.TDigest, Window/Granula)
+func first[T comparable](x ...T) T {
+	var zero T
 
-	for i := range ss {
-		ss[i] = quantile.NewExtremesBiased(0.01, 4096)
+	for _, x := range x {
+		if x != zero {
+			return x
+		}
 	}
 
-	return &Summary{
-		par: a.par,
-
-		ss: ss,
-
-		granula: int64(Granula),
-	}
+	return zero
 }

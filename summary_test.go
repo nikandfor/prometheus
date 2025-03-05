@@ -3,7 +3,11 @@ package prometheus
 import "testing"
 
 func TestSummary(tb *testing.T) {
-	c := NewSummary(SummaryOpts{
+	var c *Summary
+
+	c.Observe(1)
+
+	c = NewSummary(SummaryOpts{
 		Opts: Opts{
 			Namespace: "prometheus",
 			Subsystem: "tests",
@@ -24,7 +28,11 @@ func TestSummary(tb *testing.T) {
 	c.Observe(0.5)
 	c.Observe(0.6)
 
-	cv := NewSummaryVec(SummaryOpts{
+	var cv *SummaryVec
+
+	cv.WithLabelValues("first", "second").Observe(1)
+
+	cv = NewSummaryVec(SummaryOpts{
 		Opts: Opts{
 			Namespace: "prometheus",
 			Subsystem: "tests",

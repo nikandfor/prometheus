@@ -1,10 +1,23 @@
 package prometheus
 
-import "strings"
+import (
+	"net/http"
+	"strings"
+	"sync"
+)
 
 type (
-	Register struct {
-		//
+	Registerer interface {
+		Register(c Collector) error
+		MustRegister(c ...Collector)
+		//	Unregister(c Collector) bool
+	}
+
+	Registry struct {
+		mu sync.Mutex
+
+		l []Collector
+		b BufWriter
 	}
 
 	Collector interface {
@@ -26,11 +39,71 @@ type (
 	}
 )
 
+var DefaultRegistry = &Registry{}
+
+func NewRegistry() *Registry {
+	return &Registry{}
+}
+
+func (r *Registry) RegisterAll(c ...Collector) error {
+	for _, c := range c {
+		err := r.Register(c)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *Registry) Register(c Collector) error {
+	defer r.mu.Unlock()
+	r.mu.Lock()
+
+	r.l = append(r.l, c)
+
+	return nil
+}
+
+func (r *Registry) MustRegister(c ...Collector) {
+	for _, c := range c {
+		err := r.Register(c)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+// func (r *Registry) Unregister(c Collector) bool { return false }
+
+func (r *Registry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	defer r.mu.Unlock()
+	r.mu.Lock()
+
+	r.b.Reset()
+
+	for _, c := range r.l {
+		save := r.b.Len()
+
+		err := c.Collect(&r.b)
+		if err != nil {
+			r.b.Truncate(save)
+		}
+	}
+
+	_, err := r.b.WriteTo(w)
+	_ = err
+}
+
+func (opts *Opts) FQDN() string {
+	return join(opts.Namespace, opts.Subsystem, opts.Name)
+}
+
 func (opts *Opts) desc(typ Type) Desc {
 	ln, lv := splitLabels(opts.Labels)
 
 	return Desc{
-		fqdn: join(opts.Namespace, opts.Subsystem, opts.Name),
+		fqdn: opts.FQDN(),
 		typ:  typ,
 		help: opts.Help,
 
@@ -43,7 +116,7 @@ func (d *Desc) WriteHeader(w Writer) error {
 	return w.Header(d.fqdn, d.help, d.typ, d.labelsNames, d.labelsValues)
 }
 
-func (v *GaugeMetric) Collect(w Writer) error {
+func (v *Gauge) Collect(w Writer) error {
 	err := v.d.WriteHeader(w)
 	if err != nil {
 		return err
@@ -64,7 +137,7 @@ func (v *Gauge) writeMetric(w Writer, ln, lv []string) error {
 	return nil
 }
 
-func (v *CounterMetric) Collect(w Writer) error {
+func (v *Counter) Collect(w Writer) error {
 	err := v.d.WriteHeader(w)
 	if err != nil {
 		return err
@@ -85,7 +158,7 @@ func (v *Counter) writeMetric(w Writer, ln, lv []string) error {
 	return nil
 }
 
-func (v *Vector[T, A]) Collect(w Writer) error {
+func (v *Vector[T]) Collect(w Writer) error {
 	err := v.d.WriteHeader(w)
 	if err != nil {
 		return err

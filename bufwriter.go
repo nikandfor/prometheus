@@ -32,15 +32,6 @@ func (w *BufWriter) Reset() {
 	w.b = w.b[:0]
 }
 
-func (w *BufWriter) Bytes() []byte {
-	return w.b
-}
-
-func (w *BufWriter) WriteTo(wr io.Writer) (int64, error) {
-	n, err := wr.Write(w.b)
-	return int64(n), err
-}
-
 func (w *BufWriter) Header(fqdn, help string, typ Type, ln, lv []string) error {
 	if len(ln) != len(lv) {
 		panic(len(ln) - len(lv))
@@ -108,4 +99,21 @@ func (w *BufWriter) Metric(suffix string, v float64, ln, lv []string) error {
 	w.b = fmt.Appendf(w.b, " %g\n", v)
 
 	return nil
+}
+
+func (w *BufWriter) Bytes() []byte {
+	return w.b
+}
+
+func (w *BufWriter) Len() int {
+	return len(w.b)
+}
+
+func (w *BufWriter) Truncate(l int) {
+	w.b = w.b[:l]
+}
+
+func (w *BufWriter) WriteTo(wr io.Writer) (int64, error) {
+	n, err := wr.Write(w.b)
+	return int64(n), err
 }

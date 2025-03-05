@@ -25,40 +25,30 @@ type (
 
 	GaugeOpts = Opts
 
-	GaugeMetric struct {
+	Gauge struct {
 		d Desc
 
-		Gauge
-	}
-
-	Gauge struct {
 		mu sync.Mutex
-
-		v float64
+		v  float64
 	}
 
 	CounterOpts = Opts
 
-	CounterMetric struct {
+	Counter struct {
 		d Desc
 
-		Counter
-	}
-
-	Counter struct {
 		mu sync.Mutex
-
-		v float64
+		v  float64
 	}
 
-	GaugeVec   = Vector[*Gauge, gnew[Gauge]]
-	CounterVec = Vector[*Counter, gnew[Counter]]
+	GaugeVec   = Vector[*Gauge]
+	CounterVec = Vector[*Counter]
 
-	Vector[T writerMetric, A alloc[T]] struct {
+	Vector[T writerMetric] struct {
 		d      Desc
 		labels []string // names
 
-		a A
+		a alloc[T]
 
 		mu sync.Mutex
 
@@ -82,29 +72,36 @@ type (
 )
 
 const (
-	GaugeType Type = iota
-	CounterType
+	CounterType Type = iota
+	GaugeType
 	SummaryType
+	UntypedType
+	HistogramType
+	GaugeHistogramType
 )
 
 func (t Type) String() string { return typeNames[t] }
 
 var typeNames = []string{"gauge", "counter", "summary"}
 
-func NewGauge(opts GaugeOpts) *GaugeMetric {
-	return &GaugeMetric{
+func NewGauge(opts GaugeOpts) *Gauge {
+	return &Gauge{
 		d: opts.desc(GaugeType),
 	}
 }
 
 func NewGaugeVec(opts GaugeOpts, labelNames []string) *GaugeVec {
-	return newVector[*Gauge, gnew[Gauge]](opts, GaugeType, labelNames, gnew[Gauge]{})
+	return newVector[*Gauge](opts, GaugeType, labelNames, gnew[Gauge]{})
 }
 
 func (v *Gauge) Inc()          { v.Add(1) }
 func (v *Gauge) Dec()          { v.Add(-1) }
 func (v *Gauge) Sub(d float64) { v.Add(-d) }
 func (v *Gauge) Add(d float64) {
+	if v == nil {
+		return
+	}
+
 	defer v.mu.Unlock()
 	v.mu.Lock()
 
@@ -112,24 +109,32 @@ func (v *Gauge) Add(d float64) {
 }
 
 func (v *Gauge) Set(x float64) {
+	if v == nil {
+		return
+	}
+
 	defer v.mu.Unlock()
 	v.mu.Lock()
 
 	v.v = x
 }
 
-func NewCounter(opts CounterOpts) *CounterMetric {
-	return &CounterMetric{
+func NewCounter(opts CounterOpts) *Counter {
+	return &Counter{
 		d: opts.desc(CounterType),
 	}
 }
 
 func NewCounterVec(opts CounterOpts, labelNames []string) *CounterVec {
-	return newVector[*Counter, gnew[Counter]](opts, CounterType, labelNames, gnew[Counter]{})
+	return newVector[*Counter](opts, CounterType, labelNames, gnew[Counter]{})
 }
 
 func (v *Counter) Inc() { v.Add(1) }
 func (v *Counter) Add(d float64) {
+	if v == nil {
+		return
+	}
+
 	if d < 0 {
 		panic(d)
 	}
@@ -140,8 +145,8 @@ func (v *Counter) Add(d float64) {
 	v.v += d
 }
 
-func newVector[T writerMetric, A alloc[T]](opts Opts, typ Type, labelNames []string, a A) *Vector[T, A] {
-	return &Vector[T, A]{
+func newVector[T writerMetric](opts Opts, typ Type, labelNames []string, a alloc[T]) *Vector[T] {
+	return &Vector[T]{
 		d:      opts.desc(typ),
 		labels: labelNames,
 		hash:   map[uintptr][]int{},
@@ -150,7 +155,12 @@ func newVector[T writerMetric, A alloc[T]](opts Opts, typ Type, labelNames []str
 	}
 }
 
-func (v *Vector[T, A]) WithLabelValues(labels ...string) T {
+func (v *Vector[T]) WithLabelValues(labels ...string) T {
+	if v == nil {
+		var nil T
+		return nil
+	}
+
 	if len(v.labels) != len(labels) {
 		panic(len(v.labels) - len(labels))
 	}

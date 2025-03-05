@@ -3,7 +3,11 @@ package prometheus
 import "testing"
 
 func TestGauge(tb *testing.T) {
-	c := NewGauge(GaugeOpts{
+	var c *Gauge
+
+	c.Inc()
+
+	c = NewGauge(GaugeOpts{
 		Namespace: "prometheus",
 		Subsystem: "tests",
 		Name:      "gauge",
@@ -16,7 +20,11 @@ func TestGauge(tb *testing.T) {
 	c.Add(4)
 	c.Inc()
 
-	cv := NewGaugeVec(GaugeOpts{
+	var cv *GaugeVec
+
+	cv.WithLabelValues("first", "second").Inc()
+
+	cv = NewGaugeVec(GaugeOpts{
 		Namespace: "prometheus",
 		Subsystem: "tests",
 		Name:      "gauge_vector",
@@ -33,7 +41,11 @@ func TestGauge(tb *testing.T) {
 }
 
 func TestCounter(tb *testing.T) {
-	c := NewCounter(CounterOpts{
+	var c *Counter
+
+	c.Inc()
+
+	c = NewCounter(CounterOpts{
 		Namespace: "prometheus",
 		Subsystem: "tests",
 		Name:      "counter",
@@ -46,7 +58,11 @@ func TestCounter(tb *testing.T) {
 	c.Add(4)
 	c.Inc()
 
-	cv := NewCounterVec(CounterOpts{
+	var cv *CounterVec
+
+	cv.WithLabelValues("first", "second").Inc()
+
+	cv = NewCounterVec(CounterOpts{
 		Namespace: "prometheus",
 		Subsystem: "tests",
 		Name:      "counter_vector",
