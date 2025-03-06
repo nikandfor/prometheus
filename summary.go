@@ -36,7 +36,7 @@ type (
 
 		par *Summary
 
-		ss []*quantile.TDigest
+		ss quantile.TDMulti
 
 		granula int64
 		last    int
@@ -86,7 +86,7 @@ func (s *Summary) initCounter() {
 	s.ss = make([]*quantile.TDigest, Window/Granula)
 
 	for i := range s.ss {
-		s.ss[i] = quantile.NewExtremesBiased(0.01, 4096)
+		s.ss[i] = quantile.NewTDExtremesBiased(0.01, 4096)
 	}
 
 	s.granula = int64(Granula)
@@ -151,7 +151,7 @@ func (v *Summary) writeMetric(w Writer, ln, lv []string) error {
 	p.ln = append(p.ln, "quantile")
 	p.lv = append(p.lv, "")
 
-	quantile.QueryMulti(p.qs, p.res, v.ss...)
+	v.ss.QueryMulti(p.qs, p.res)
 
 	for i := range p.qs {
 		p.lv[last] = p.qtext[i]
