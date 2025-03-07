@@ -1,7 +1,7 @@
 package prometheus
 
 import (
-	"strconv"
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,165 +9,121 @@ import (
 )
 
 type (
-	SummaryOpts struct {
-		Quantiles []float64
-	}
+	SummaryOpts = Opts
+
+	SummaryVec = Vector[*Summary]
 
 	Summary struct {
 		d Desc
 
+		nano func() int64
+
 		mu sync.Mutex
 
-		qs, res []float64 // quantile calc tmp vars
-		qtext   []string  // encoded to text quantile values
-
-		ln, lv []string // tmp vars to add quantile="0.9" to metric labels
-
 		sum   float64
-		count int
-
-		// end of mu
-
-		Now func() time.Time // mockable time source
-
-		// counter
-
-		// protected by par.mu
-
-		par *Summary
+		count float64
 
 		ss quantile.TDMulti
 
-		granula int64
+		granula int64 // const
 		last    int
 
-		// end of par.mu
+		qs    []float64
+		qres  []float64
+		qtext []string
+		lsbuf Labels
 	}
 
-	SummaryVec = Vector[*Summary]
-
-	summaryAlloc struct {
-		par *Summary
-	}
+	summaryAllocator struct{}
 )
 
-func NewSummary(opts Opts, sumo SummaryOpts) *Summary {
-	m := &Summary{
-		d: opts.desc(SummaryType),
+func (a summaryAllocator) New() *Summary {
+	s := &Summary{}
+	s.initCounter()
+
+	return s
+}
+
+func NewSummaryVec(o SummaryOpts, labelNames []string) *SummaryVec {
+	a := summaryAllocator{}
+
+	return NewVector(o, SummaryType, labelNames, a)
+}
+
+func NewSummary(o SummaryOpts) *Summary {
+	s := &Summary{
+		d: NewDescFromOpts(o, SummaryType),
 	}
 
-	m.initMetric(sumo.Quantiles)
-	m.initCounter()
+	s.initCounter()
 
-	return m
+	return s
 }
 
-func NewSummaryVec(opts Opts, sumo SummaryOpts, labelNames []string) *SummaryVec {
-	m := &Summary{}
-	m.initMetric(sumo.Quantiles)
-
-	return newVector[*Summary](opts, SummaryType, labelNames, summaryAlloc{m})
-}
-
-func (v *Summary) initMetric(qs []float64) {
-	v.qs = append(v.qs[:0], qs...)
-	v.res = append(v.res[:0], qs...)
-	v.qtext = make([]string, len(qs))
-
-	for i, q := range qs {
-		v.qtext[i] = strconv.FormatFloat(q, 'g', 5, 64)
-	}
-}
-
-func (s *Summary) initCounter() {
-	const Granula = 3 * time.Second
+func (m *Summary) initCounter() {
+	const Granila = 5 * time.Second
 	const Window = 15 * time.Second
+	const N = Window / Granila
 
-	s.ss = make([]*quantile.TDigest, Window/Granula)
+	m.qs = []float64{0.9, 0.99, 1}
+	m.qres = make([]float64, len(m.qs))
+	m.qtext = make([]string, len(m.qs))
 
-	for i := range s.ss {
-		s.ss[i] = quantile.NewTDExtremesBiased(0.01, 4096)
+	for i, q := range m.qs {
+		m.qtext[i] = fmt.Sprintf("%v", q)
 	}
 
-	s.granula = int64(Granula)
+	m.ss = make(quantile.TDMulti, N)
+
+	for i := range m.ss {
+		m.ss[i] = quantile.NewTDHighBiased(0.01, 1024)
+	}
+
+	m.granula = int64(Granila)
 }
 
-func (v *Summary) Observe(x float64) {
-	if v == nil {
-		return
-	}
-
-	p := first(v.par, v)
-
-	now := p.Now
-	if now == nil {
-		now = time.Now
-	}
-
-	ts := now().UnixNano()
-	g := int(ts / v.granula)
-
-	defer p.mu.Unlock()
-	p.mu.Lock()
-
-	if v.last == 0 {
-		v.last = g
-	}
-
-	for i := v.last + 1; i <= g; i++ {
-		v.ss[v.si(i)].Reset()
-	}
-
-	v.last = g
-
-	v.ss[v.si(g)].Insert(x)
-
-	p.sum += x
-	p.count++
-}
-
-func (v *Summary) si(i int) int { return i % len(v.ss) }
-
-func (v *Summary) Collect(w Writer) error {
-	err := v.d.WriteHeader(w)
+func (m *Summary) Collect(w Writer) error {
+	err := m.d.CollectHeader(w)
 	if err != nil {
 		return err
 	}
 
-	return v.writeMetric(w, nil, nil)
+	return m.CollectMetric(w, nil)
 }
 
-func (v *Summary) writeMetric(w Writer, ln, lv []string) error {
-	p := first(v.par, v)
+func (m *Summary) CollectMetric(w Writer, ls Labels) error {
+	defer m.mu.Unlock()
+	m.mu.Lock()
 
-	defer p.mu.Unlock()
-	p.mu.Lock()
+	last := len(ls)
 
-	p.ln = append(p.ln[:0], ln...)
-	p.lv = append(p.lv[:0], lv...)
+	if last >= cap(m.lsbuf) {
+		m.lsbuf = make(Labels, last+1)
+	}
 
-	last := len(p.ln)
+	copy(m.lsbuf, ls)
+	m.lsbuf = m.lsbuf[:last+1]
+	m.lsbuf[last].Name = "quantile"
 
-	p.ln = append(p.ln, "quantile")
-	p.lv = append(p.lv, "")
+	m.ss.QueryMulti(m.qs, m.qres)
 
-	v.ss.QueryMulti(p.qs, p.res)
+	for i, v := range m.qres {
+		m.lsbuf[last].Value = m.qtext[i]
 
-	for i := range p.qs {
-		p.lv[last] = p.qtext[i]
-
-		err := w.Metric("", p.res[i], p.ln, p.lv)
+		err := w.Write(v, "", m.lsbuf)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := w.Metric("sum", p.sum, p.ln[:last], p.lv[:last])
+	m.lsbuf = m.lsbuf[:last]
+
+	err := w.Write(m.sum, "sum", m.lsbuf)
 	if err != nil {
 		return err
 	}
 
-	err = w.Metric("count", float64(p.count), p.ln[:last], p.lv[:last])
+	err = w.Write(m.count, "count", m.lsbuf)
 	if err != nil {
 		return err
 	}
@@ -175,20 +131,49 @@ func (v *Summary) writeMetric(w Writer, ln, lv []string) error {
 	return nil
 }
 
-func (a summaryAlloc) new() *Summary {
-	s := &Summary{par: a.par}
-	s.initCounter()
-	return s
-}
-
-func first[T comparable](x ...T) T {
-	var zero T
-
-	for _, x := range x {
-		if x != zero {
-			return x
-		}
+func (m *Summary) Observe(v float64) {
+	if m == nil {
+		return
 	}
 
-	return zero
+	g := m.curgranula()
+
+	defer m.mu.Unlock()
+	m.mu.Lock()
+
+	if m.last == 0 {
+		m.last = g
+	}
+
+	for i := m.last + 1; i <= g; i++ {
+		m.ss[m.si(i)].Reset()
+	}
+
+	m.last = g
+
+	m.ss[m.si(g)].Insert(v)
+
+	m.sum += v
+	m.count++
+}
+
+func (m *Summary) curgranula() int {
+	var ts int64
+
+	if m.nano != nil {
+		ts = m.nano()
+	} else {
+		ts = time.Now().UnixNano()
+	}
+
+	return int(ts / m.granula)
+}
+func (m *Summary) si(i int) int { return i % len(m.ss) }
+
+func csel[T any](c bool, x, y T) T {
+	if c {
+		return x
+	}
+
+	return y
 }

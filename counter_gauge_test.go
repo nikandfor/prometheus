@@ -14,7 +14,7 @@ func TestGauge(tb *testing.T) {
 
 		Help: "simple gauge",
 
-		Labels: []Label{{"counter", "label"}},
+		ConstLabels: Labels{{"counter", "label"}},
 	})
 
 	c.Add(4)
@@ -31,7 +31,7 @@ func TestGauge(tb *testing.T) {
 
 		Help: "simple vectorized gauge",
 
-		Labels: []Label{{"vector", "label"}},
+		ConstLabels: Labels{{"vector", "label"}},
 	}, []string{"first", "second"})
 
 	cv.WithLabelValues("1", "a").Inc()
@@ -52,7 +52,7 @@ func TestCounter(tb *testing.T) {
 
 		Help: "simple counter",
 
-		Labels: []Label{{"counter", "label"}},
+		ConstLabels: Labels{{"counter", "label"}},
 	})
 
 	c.Add(4)
@@ -69,7 +69,7 @@ func TestCounter(tb *testing.T) {
 
 		Help: "simple vectorized counter",
 
-		Labels: []Label{{"vector", "label"}},
+		ConstLabels: Labels{{"vector", "label"}},
 	}, []string{"first", "second"})
 
 	cv.WithLabelValues("1", "a").Inc()
@@ -79,7 +79,7 @@ func TestCounter(tb *testing.T) {
 }
 
 func dumpCollectors(tb testing.TB, cc ...Collector) {
-	w := NewBufWriter([]Label{{"buf", "label"}})
+	w := NewBufWriter(Labels{{"buf", "label"}})
 
 	for _, c := range cc {
 		err := c.Collect(w)

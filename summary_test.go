@@ -14,17 +14,20 @@ func TestSummary(tb *testing.T) {
 
 		Help: "simple summary",
 
-		Labels: []Label{{"counter", "label"}},
-	}, SummaryOpts{
-		Quantiles: []float64{0.9, 0.95, 1},
+		ConstLabels: Labels{{"counter", "label"}},
 	})
 
+	c.Observe(0.0)
 	c.Observe(0.1)
 	c.Observe(0.2)
 	c.Observe(0.3)
 	c.Observe(0.4)
 	c.Observe(0.5)
 	c.Observe(0.6)
+	c.Observe(0.7)
+	c.Observe(0.8)
+	c.Observe(0.9)
+	c.Observe(1)
 
 	var cv *SummaryVec
 
@@ -37,9 +40,7 @@ func TestSummary(tb *testing.T) {
 
 		Help: "simple summary vec",
 
-		Labels: []Label{{"counter", "label"}},
-	}, SummaryOpts{
-		Quantiles: []float64{0.9, 0.95, 1},
+		ConstLabels: Labels{{"counter", "label"}},
 	}, []string{"first"})
 
 	cv.WithLabelValues("a").Observe(0.5)
