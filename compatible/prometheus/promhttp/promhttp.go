@@ -3,9 +3,9 @@ package promhttp
 import (
 	"net/http"
 
-	"nikand.dev/go/prometheus"
+	"nikand.dev/go/prometheus/promhttp"
 )
 
 func Handler() http.Handler {
-	return prometheus.DefaultRegistry
+	return promhttp.Handler()
 }

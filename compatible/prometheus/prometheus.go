@@ -40,24 +40,18 @@ func NewSummary(opts SummaryOpts) Summary {
 }
 
 func NewSummaryVec(opts SummaryOpts, labels []string) *SummaryVec {
-	o, sumo := convertSummaryOpts(opts)
+	o := convertSummaryOpts(opts)
 
-	return prometheus.NewSummaryVec(o, sumo, labels)
+	return prometheus.NewSummaryVec(o, labels)
 }
 
-func convertSummaryOpts(opts SummaryOpts) (prometheus.Opts, prometheus.SummaryOpts) {
-	o := prometheus.Opts{
-		Namespace: opts.Namespace,
-		Subsystem: opts.Subsystem,
-		Name:      opts.Name,
-		Labels:    convertLabels(opts.Labels),
+func convertSummaryOpts(opts SummaryOpts) prometheus.SummaryOpts {
+	return prometheus.Opts{
+		Namespace:   opts.Namespace,
+		Subsystem:   opts.Subsystem,
+		Name:        opts.Name,
+		ConstLabels: convertLabels(opts.Labels),
 	}
-
-	sumo := prometheus.SummaryOpts{
-		Quantiles: convertQuantiles(opts.Objectives),
-	}
-
-	return o, sumo
 }
 
 func convertLabels(ls Labels) []prometheus.Label {

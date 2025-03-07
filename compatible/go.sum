@@ -1,4 +1,4 @@
-nikand.dev/go/prometheus v0.0.0-20250305205648-c39896d36448 h1:Hs1zboqpwqtANhGmNH0kPotliR6biILRachiTVR3k4U=
-nikand.dev/go/prometheus v0.0.0-20250305205648-c39896d36448/go.mod h1:t4F5QUXIAJ5zwgfEGBqXTH4dMf3q2mmq+PjodWr+aJA=
-nikand.dev/go/quantile v0.0.0-20250304234423-413a1b349426 h1:OVQxCwUzSg5Tq1Vh+3spbpnDSduWBJXFfcNuigWCdJU=
-nikand.dev/go/quantile v0.0.0-20250304234423-413a1b349426/go.mod h1:6QR4AK4piTDPa4ZJfYLX4cw5JFJulAr4Ici6E1l0mrI=
+nikand.dev/go/prometheus v0.0.0-20250307230435-77c763029438 h1:cqd4YyNyuNaU7+EsRs3Zi+Gv94Om3i1FXoBmOExyQyg=
+nikand.dev/go/prometheus v0.0.0-20250307230435-77c763029438/go.mod h1:azdqxGlq6T6X3Rdtr8wIHD4cEsLepQckWAqQs2JazQI=
+nikand.dev/go/quantile v0.0.0-20250307215922-4e47b9a29282 h1:FGL4VFfDaedz4buAaDMjvDvUyH7Qg84MJzXqTkMUJ5U=
+nikand.dev/go/quantile v0.0.0-20250307215922-4e47b9a29282/go.mod h1:6QR4AK4piTDPa4ZJfYLX4cw5JFJulAr4Ici6E1l0mrI=
