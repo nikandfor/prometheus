@@ -7,7 +7,7 @@ func TestSummary(tb *testing.T) {
 
 	c.Observe(1)
 
-	c = NewSummary(Opts{
+	c = NewSummary(SummaryOpts{
 		Namespace: "prometheus",
 		Subsystem: "tests",
 		Name:      "summary",
@@ -33,7 +33,7 @@ func TestSummary(tb *testing.T) {
 
 	cv.WithLabelValues("first", "second").Observe(1)
 
-	cv = NewSummaryVec(Opts{
+	cv = NewSummaryVec(SummaryOpts{
 		Namespace: "prometheus",
 		Subsystem: "tests",
 		Name:      "summary_vector",

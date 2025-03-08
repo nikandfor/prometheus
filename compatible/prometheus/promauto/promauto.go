@@ -1,7 +1,7 @@
 package promauto
 
 import (
-	"nikand.dev/go/prometheus/compatible/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func NewCounter(opts prometheus.CounterOpts) prometheus.Counter {

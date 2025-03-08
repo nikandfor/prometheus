@@ -1,18 +1,20 @@
 package prometheus
 
-import "nikand.dev/go/prometheus"
+import (
+	pp "nikand.dev/go/prometheus"
+)
 
 type (
-	Desc   = prometheus.Desc
+	Desc   pp.Desc
 	Metric interface{}
 	Labels map[string]string
 
-	CounterOpts = prometheus.CounterOpts
-	Counter     = *prometheus.Counter
-	CounterVec  = prometheus.CounterVec
+	CounterOpts = pp.CounterOpts
+	Counter     = *pp.Counter
+	CounterVec  = pp.CounterVec
 
-	Summary    = *prometheus.Summary
-	SummaryVec = prometheus.SummaryVec
+	Summary    = *pp.Summary
+	SummaryVec = pp.SummaryVec
 
 	SummaryOpts struct {
 		Namespace string
@@ -21,45 +23,45 @@ type (
 
 		Help string
 
-		Labels Labels
+		//	ConstLabels Labels
 
 		Objectives map[float64]float64
 	}
 )
 
 func NewCounter(opts CounterOpts) Counter {
-	return prometheus.NewCounter(opts)
+	return pp.NewCounter(opts)
 }
 
 func NewCounterVec(opts CounterOpts, labels []string) *CounterVec {
-	return prometheus.NewCounterVec(opts, labels)
+	return pp.NewCounterVec(opts, labels)
 }
 
 func NewSummary(opts SummaryOpts) Summary {
-	return prometheus.NewSummary(convertSummaryOpts(opts))
+	return pp.NewSummary(summaryOpts(opts))
 }
 
 func NewSummaryVec(opts SummaryOpts, labels []string) *SummaryVec {
-	o := convertSummaryOpts(opts)
+	o := summaryOpts(opts)
 
-	return prometheus.NewSummaryVec(o, labels)
+	return pp.NewSummaryVec(o, labels)
 }
 
-func convertSummaryOpts(opts SummaryOpts) prometheus.SummaryOpts {
-	return prometheus.Opts{
-		Namespace:   opts.Namespace,
-		Subsystem:   opts.Subsystem,
-		Name:        opts.Name,
-		ConstLabels: convertLabels(opts.Labels),
+func summaryOpts(opts SummaryOpts) pp.SummaryOpts {
+	return pp.SummaryOpts{
+		Namespace: opts.Namespace,
+		Subsystem: opts.Subsystem,
+		Name:      opts.Name,
+		//	ConstLabels: convertLabels(opts.ConstLabels),
 	}
 }
 
-func convertLabels(ls Labels) []prometheus.Label {
-	r := make([]prometheus.Label, len(ls))
+func convertLabels(ls Labels) []pp.Label {
+	r := make([]pp.Label, len(ls))
 	i := 0
 
 	for n, v := range ls {
-		r[i] = prometheus.Label{
+		r[i] = pp.Label{
 			Name:  n,
 			Value: v,
 		}
